@@ -1,0 +1,17 @@
+/* Content.css */
+.content-container {
+  width: 100%;
+}
+
+.motion-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}
+@media (max-width: 767px) {
+  .content-container {
+    padding: 16px;
+  }
+}

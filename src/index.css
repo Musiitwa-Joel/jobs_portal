@@ -1,0 +1,268 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family:
+        -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+        "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+        sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+code {
+    font-family:
+        source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+#root {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Ant Design customizations */
+.ant-layout {
+    background: #ffffff;
+}
+
+.ant-layout-header {
+    line-height: 56px;
+    height: 56px;
+}
+
+.ant-card {
+    transition: all 0.3s ease;
+}
+
+.ant-card-hoverable:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.ant-btn-primary {
+    transition: all 0.3s ease;
+}
+
+.ant-btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(199, 70, 52, 0.3);
+}
+
+.ant-tag {
+    font-weight: 500;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c74634;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a33929;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-in;
+}
+
+.slide-up {
+    animation: slideUp 0.3s ease-out;
+}
+
+/* Responsive utilities */
+@media (max-width: 768px) {
+    .ant-layout-header {
+        padding: 0 20px;
+    }
+}
+
+/* Loading states */
+.ant-spin-blur {
+    opacity: 0.5;
+    transition: opacity 0.3s;
+}
+
+/* Form improvements */
+.ant-form-item-label > label {
+    font-weight: 500;
+    font-size: 12px;
+}
+
+.ant-form-item {
+    margin-bottom: 16px;
+}
+
+.ant-input:focus,
+.ant-input-focused,
+.ant-select-focused .ant-select-selector {
+    border-color: #c74634;
+    box-shadow: 0 0 0 2px rgba(199, 70, 52, 0.1);
+}
+
+/* Timeline customization */
+.ant-timeline-item-head {
+    border-width: 3px;
+}
+
+/* Empty state */
+.ant-empty-image {
+    height: 80px;
+}
+
+.ant-empty-description {
+    font-size: 13px;
+}
+
+/* Alert customization */
+.ant-alert {
+    border-radius: 4px;
+}
+
+/* Tag improvements */
+.ant-tag {
+    padding: 1px 8px;
+    font-size: 11px;
+    line-height: 18px;
+    border-radius: 2px;
+}
+
+/* Description customization */
+.ant-descriptions-item-label {
+    font-weight: 500;
+    color: #595959;
+}
+
+/* Card title */
+.ant-card-head-title {
+    font-weight: 600;
+    font-size: 15px;
+}
+
+/* Card padding */
+.ant-card-body {
+    padding: 20px;
+}
+
+/* Result page */
+.ant-result-icon {
+    font-size: 56px;
+}
+
+.ant-result-title {
+    font-size: 20px;
+}
+
+.ant-result-subtitle {
+    font-size: 13px;
+}
+
+/* Upload */
+.ant-upload-list-item {
+    border-radius: 4px;
+}
+
+/* Dark mode adjustments */
+.dark .ant-layout {
+    background: #1f1f1f;
+}
+
+.dark .ant-card {
+    background: #262626;
+    border-color: #434343;
+}
+
+.dark .ant-input,
+.dark .ant-select-selector {
+    background: #262626;
+    border-color: #434343;
+    color: #ffffff;
+}
+
+.dark ::-webkit-scrollbar-track {
+    background: #262626;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+    background: #595959;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+    background: #8c8c8c;
+}
+
+/* Smooth transitions */
+.ant-btn,
+.ant-card,
+.ant-input,
+.ant-select-selector {
+    transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+/* Typography */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+p {
+    margin-bottom: 0;
+}
+
+/* Print styles */
+@media print {
+    .ant-layout-header,
+    .ant-layout-footer,
+    .no-print {
+        display: none;
+    }
+}
