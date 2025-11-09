@@ -6,56 +6,102 @@ import {
   ClockCircleOutlined,
 } from "@ant-design/icons";
 import { motion } from "framer-motion";
-import { Job } from "../../../types/job";
+import { JobPosting, JobPostingVisibility } from "../../../types/job";
 
 const { Title, Text, Paragraph } = Typography;
 
 interface JobCardProps {
-  job: Job;
+  job: JobPosting;
   onViewDetails: (jobId: string) => void;
 }
 
+const employmentTypeColor = (type?: string | null) => {
+  switch (type) {
+    case "Full-time":
+      return "blue";
+    case "Part-time":
+      return "green";
+    case "Contract":
+      return "orange";
+    case "Temporary":
+      return "purple";
+    default:
+      return "default";
+  }
+};
+
+const visibilityColor = (visibility: JobPostingVisibility) => {
+  switch (visibility) {
+    case "INTERNAL":
+      return "gold";
+    case "EXTERNAL":
+      return "cyan";
+    case "BOTH":
+      return "magenta";
+    default:
+      return "default";
+  }
+};
+
+const visibilityLabel = (visibility: JobPostingVisibility) => {
+  if (visibility === "BOTH") return "Internal & External";
+  if (visibility === "INTERNAL") return "Internal";
+  return "External";
+};
+
+const formatSalary = (job: JobPosting) => {
+  if (job.salaryLabel) return job.salaryLabel;
+  if (job.minSalary == null && job.maxSalary == null) return null;
+
+  const formatter = new Intl.NumberFormat("en-US", {
+    style: job.currency ? "currency" : "decimal",
+    currency: job.currency || undefined,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+
+  const parts: string[] = [];
+  if (job.minSalary != null) parts.push(formatter.format(job.minSalary));
+  if (job.maxSalary != null && job.maxSalary !== job.minSalary) {
+    parts.push(formatter.format(job.maxSalary));
+  }
+
+  if (!parts.length) return null;
+  return job.payPeriod
+    ? `${parts.join(" - ")} (${job.payPeriod.toLowerCase()})`
+    : parts.join(" - ");
+};
+
+const postedLabel = (
+  postedDate?: string | null,
+  openingDate?: string | null
+) => {
+  const reference = postedDate || openingDate;
+  if (!reference) return null;
+
+  const posted = new Date(reference);
+  const today = new Date();
+  const diffTime = Math.abs(today.getTime() - posted.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return "Posted today";
+  if (diffDays === 1) return "Posted yesterday";
+  if (diffDays < 7) return `Posted ${diffDays} days ago`;
+  if (diffDays < 30) return `Posted ${Math.floor(diffDays / 7)} weeks ago`;
+  return `Posted ${Math.floor(diffDays / 30)} months ago`;
+};
+
 export function JobCard({ job, onViewDetails }: JobCardProps) {
-  const getEmploymentTypeColor = (type: string) => {
-    switch (type) {
-      case "Full-time":
-        return "blue";
-      case "Part-time":
-        return "green";
-      case "Contract":
-        return "orange";
-      case "Temporary":
-        return "purple";
-      default:
-        return "default";
-    }
-  };
-
-  const getEligibilityColor = (eligibility: string) => {
-    switch (eligibility) {
-      case "Internal":
-        return "gold";
-      case "External":
-        return "cyan";
-      case "Both":
-        return "magenta";
-      default:
-        return "default";
-    }
-  };
-
-  const calculateDaysAgo = (datePosted: string) => {
-    const posted = new Date(datePosted);
-    const today = new Date();
-    const diffTime = Math.abs(today.getTime() - posted.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return "Posted today";
-    if (diffDays === 1) return "Posted yesterday";
-    if (diffDays < 7) return `Posted ${diffDays} days ago`;
-    if (diffDays < 30) return `Posted ${Math.floor(diffDays / 7)} weeks ago`;
-    return `Posted ${Math.floor(diffDays / 30)} months ago`;
-  };
+  const salary = formatSalary(job);
+  const posted =
+    postedLabel(job.postedDate, job.openingDate) || "Recently posted";
+  const closingDateLabel = job.closingDate
+    ? new Date(job.closingDate).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : null;
 
   return (
     <motion.div
@@ -74,13 +120,13 @@ export function JobCard({ job, onViewDetails }: JobCardProps) {
           cursor: "pointer",
         }}
         bodyStyle={{ padding: 20, display: "flex", flexDirection: "column" }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.1)";
-          e.currentTarget.style.borderColor = "#d9d9d9";
+        onMouseEnter={(event) => {
+          event.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.1)";
+          event.currentTarget.style.borderColor = "#d9d9d9";
         }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.08)";
-          e.currentTarget.style.borderColor = "#e8e8e8";
+        onMouseLeave={(event) => {
+          event.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.08)";
+          event.currentTarget.style.borderColor = "#e8e8e8";
         }}
       >
         <Space
@@ -88,10 +134,9 @@ export function JobCard({ job, onViewDetails }: JobCardProps) {
           size="small"
           style={{ width: "100%", height: "100%" }}
         >
-          {/* Tags */}
           <Space size="small" wrap>
             <Tag
-              color={getEmploymentTypeColor(job.employmentType)}
+              color={employmentTypeColor(job.employmentType)}
               style={{
                 fontSize: 11,
                 padding: "1px 8px",
@@ -99,10 +144,10 @@ export function JobCard({ job, onViewDetails }: JobCardProps) {
                 fontWeight: 500,
               }}
             >
-              {job.employmentType}
+              {job.employmentType || "Not specified"}
             </Tag>
             <Tag
-              color={getEligibilityColor(job.eligibility)}
+              color={visibilityColor(job.visibility)}
               style={{
                 fontSize: 11,
                 padding: "1px 8px",
@@ -110,11 +155,10 @@ export function JobCard({ job, onViewDetails }: JobCardProps) {
                 fontWeight: 500,
               }}
             >
-              {job.eligibility}
+              {visibilityLabel(job.visibility)}
             </Tag>
           </Space>
 
-          {/* Job Title */}
           <Title
             level={4}
             style={{
@@ -126,36 +170,32 @@ export function JobCard({ job, onViewDetails }: JobCardProps) {
               lineHeight: 1.3,
             }}
           >
-            {job.title}
+            {job.jobTitle}
           </Title>
 
-          {/* Job Details */}
           <Space direction="vertical" size={6} style={{ width: "100%" }}>
             <Space size="small">
               <TeamOutlined style={{ color: "#666666", fontSize: 13 }} />
               <Text style={{ fontSize: 12, color: "#666666" }}>
-                {job.department}
+                {job.department || "Department not specified"}
               </Text>
             </Space>
 
             <Space size="small">
               <EnvironmentOutlined style={{ color: "#666666", fontSize: 13 }} />
               <Text style={{ fontSize: 12, color: "#666666" }}>
-                {job.location}
+                {job.workLocation || "Location not specified"}
               </Text>
             </Space>
 
-            {job.salary && (
+            {salary && (
               <Space size="small">
                 <CalendarOutlined style={{ color: "#666666", fontSize: 13 }} />
-                <Text style={{ fontSize: 12, color: "#666666" }}>
-                  {job.salary}
-                </Text>
+                <Text style={{ fontSize: 12, color: "#666666" }}>{salary}</Text>
               </Space>
             )}
           </Space>
 
-          {/* Description */}
           <Paragraph
             ellipsis={{ rows: 2 }}
             style={{
@@ -166,10 +206,9 @@ export function JobCard({ job, onViewDetails }: JobCardProps) {
               flex: 1,
             }}
           >
-            {job.description}
+            {job.jobSummary || "No description available."}
           </Paragraph>
 
-          {/* Footer */}
           <div style={{ paddingTop: 12, borderTop: "1px solid #f0f0f0" }}>
             <div
               style={{
@@ -181,17 +220,12 @@ export function JobCard({ job, onViewDetails }: JobCardProps) {
             >
               <Space size="small" style={{ fontSize: 11 }}>
                 <ClockCircleOutlined style={{ color: "#999999" }} />
-                <Text style={{ fontSize: 11, color: "#999999" }}>
-                  {calculateDaysAgo(job.datePosted)}
-                </Text>
+                <Text style={{ fontSize: 11, color: "#999999" }}>{posted}</Text>
               </Space>
               <Text style={{ fontSize: 11, color: "#999999" }}>
-                Deadline:{" "}
-                {new Date(job.deadline).toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}
+                {closingDateLabel
+                  ? `Deadline: ${closingDateLabel}`
+                  : "Open until filled"}
               </Text>
             </div>
             <Button

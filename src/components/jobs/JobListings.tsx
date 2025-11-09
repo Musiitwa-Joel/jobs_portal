@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Input,
   Select,
@@ -8,18 +8,20 @@ import {
   Space,
   Card,
   Empty,
-  Badge,
+  Button,
+  Spin,
+  Alert,
 } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 import { motion } from "framer-motion";
-import { Job, JobFilters } from "../../../types/job";
-import { JobCard } from "./JobCard";
+import { useQuery } from "@apollo/client";
 import {
-  mockJobs,
-  departments,
-  locations,
-  employmentTypes,
-} from "../../data/mockJobs";
+  JobPosting,
+  JobPostingFilters,
+  JobPostingConnection,
+} from "../../../types/job";
+import { JobCard } from "./JobCard";
+import { JOB_POSTINGS_QUERY } from "../../gql/queries";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -28,54 +30,143 @@ interface JobListingsProps {
   onSelectJob: (jobId: string) => void;
 }
 
+const PAGE_LIMIT = 100;
+
+type FiltersState = JobPostingFilters & {
+  search: string;
+  employmentType?: string;
+};
+
 export function JobListings({ onSelectJob }: JobListingsProps) {
-  const [filters, setFilters] = useState<JobFilters>({
+  const [filters, setFilters] = useState<FiltersState>({
     department: undefined,
-    location: undefined,
+    workLocation: undefined,
     employmentType: undefined,
     search: "",
   });
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  const filteredJobs = useMemo(() => {
-    return mockJobs.filter((job) => {
-      const matchesDepartment =
-        !filters.department || job.department === filters.department;
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setDebouncedSearch(filters.search.trim());
+    }, 400);
+    return () => window.clearTimeout(handle);
+  }, [filters.search]);
+
+  const serverFilter = useMemo(() => {
+    const filter: Record<string, unknown> = {};
+    if (debouncedSearch) {
+      filter.search = debouncedSearch;
+    }
+    if (filters.department) {
+      filter.department = filters.department;
+    }
+    filter.status = "ACTIVE";
+    return Object.keys(filter).length ? filter : undefined;
+  }, [debouncedSearch, filters.department]);
+
+  const { data, loading, error, refetch } = useQuery<{
+    jobPostings: JobPostingConnection;
+  }>(JOB_POSTINGS_QUERY, {
+    variables: {
+      limit: PAGE_LIMIT,
+      offset: 0,
+      filter: serverFilter,
+    },
+    fetchPolicy: "cache-and-network",
+    notifyOnNetworkStatusChange: true,
+  });
+
+  const postings = data?.jobPostings?.data ?? [];
+
+  const filteredJobs: JobPosting[] = useMemo(() => {
+    return postings.filter((job) => {
+      const matchesVisibility =
+        job.visibility === "EXTERNAL" || job.visibility === "BOTH";
       const matchesLocation =
-        !filters.location || job.location === filters.location;
+        !filters.workLocation || job.workLocation === filters.workLocation;
       const matchesEmploymentType =
         !filters.employmentType ||
         job.employmentType === filters.employmentType;
-      const matchesSearch =
-        !filters.search ||
-        job.title.toLowerCase().includes(filters.search.toLowerCase()) ||
-        job.description.toLowerCase().includes(filters.search.toLowerCase()) ||
-        job.department.toLowerCase().includes(filters.search.toLowerCase());
-
+      const matchesSearch = debouncedSearch
+        ? [job.jobTitle, job.jobSummary, job.department, job.jobCode]
+            .filter(Boolean)
+            .some((value) =>
+              String(value)
+                .toLowerCase()
+                .includes(debouncedSearch.toLowerCase())
+            )
+        : true;
       return (
-        matchesDepartment &&
+        matchesVisibility &&
         matchesLocation &&
         matchesEmploymentType &&
         matchesSearch
       );
     });
-  }, [filters]);
+  }, [postings, filters.workLocation, filters.employmentType, debouncedSearch]);
 
-  const handleFilterChange = (key: keyof JobFilters, value: any) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
+  const handleFilterChange = <K extends keyof FiltersState>(
+    key: K,
+    value: FiltersState[K] | null
+  ) => {
+    setFilters((prev) => ({
+      ...prev,
+      [key]: value === null || value === "" ? undefined : value,
+    }));
   };
 
   const clearFilters = () => {
     setFilters({
       department: undefined,
-      location: undefined,
+      workLocation: undefined,
       employmentType: undefined,
       search: "",
     });
   };
 
-  const activeFilterCount = Object.values(filters).filter(
-    (value) => value !== undefined && value !== "",
-  ).length;
+  const activeFilterCount = Object.entries(filters).filter(([key, value]) => {
+    if (key === "search") {
+      return Boolean(value);
+    }
+    return value !== undefined && value !== "";
+  }).length;
+
+  const departmentOptions = useMemo(() => {
+    const set = new Set<string>();
+    postings.forEach((job) => {
+      if (job.department) {
+        set.add(job.department);
+      }
+    });
+    return Array.from(set).sort();
+  }, [postings]);
+
+  const locationOptions = useMemo(() => {
+    const set = new Set<string>();
+    postings.forEach((job) => {
+      if (job.workLocation) {
+        set.add(job.workLocation);
+      }
+    });
+    if (filters.workLocation && !set.has(filters.workLocation)) {
+      set.add(filters.workLocation);
+    }
+    return Array.from(set).sort();
+  }, [postings, filters.workLocation]);
+
+  const employmentTypeOptions = useMemo(() => {
+    const set = new Set<string>();
+    postings.forEach((job) => {
+      if (job.employmentType) {
+        set.add(job.employmentType);
+      }
+    });
+    if (filters.employmentType && !set.has(filters.employmentType)) {
+      set.add(filters.employmentType);
+    }
+    return Array.from(set).sort();
+  }, [postings, filters.employmentType]);
 
   return (
     <div style={{ maxWidth: 1400, margin: "0 auto", padding: "40px 24px" }}>
@@ -147,7 +238,7 @@ export function JobListings({ onSelectJob }: JobListingsProps) {
             />
 
             {/* Filter Dropdowns */}
-            <Row gutter={[12, 12]}>
+            <Row gutter={[12, 12]} align="bottom">
               <Col xs={24} sm={8} md={6}>
                 <Text
                   strong
@@ -167,7 +258,7 @@ export function JobListings({ onSelectJob }: JobListingsProps) {
                   onChange={(value) => handleFilterChange("department", value)}
                   allowClear
                 >
-                  {departments.map((dept) => (
+                  {departmentOptions.map((dept) => (
                     <Option key={dept} value={dept}>
                       {dept}
                     </Option>
@@ -190,11 +281,13 @@ export function JobListings({ onSelectJob }: JobListingsProps) {
                 <Select
                   style={{ width: "100%" }}
                   placeholder="All Locations"
-                  value={filters.location}
-                  onChange={(value) => handleFilterChange("location", value)}
+                  value={filters.workLocation}
+                  onChange={(value) =>
+                    handleFilterChange("workLocation", value)
+                  }
                   allowClear
                 >
-                  {locations.map((loc) => (
+                  {locationOptions.map((loc) => (
                     <Option key={loc} value={loc}>
                       {loc}
                     </Option>
@@ -223,30 +316,52 @@ export function JobListings({ onSelectJob }: JobListingsProps) {
                   }
                   allowClear
                 >
-                  {employmentTypes.map((type) => (
+                  {employmentTypeOptions.map((type) => (
                     <Option key={type} value={type}>
                       {type}
                     </Option>
                   ))}
                 </Select>
               </Col>
-
-              {activeFilterCount > 0 && (
-                <Col xs={24} sm={24} md={6}>
-                  <div style={{ marginTop: 22 }}>
+              <Col xs={24} sm={8} md={6}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-start",
+                    gap: 12,
+                    height: "100%",
+                    justifyContent:
+                      activeFilterCount > 0 ? "space-between" : "flex-end",
+                  }}
+                >
+                  {activeFilterCount > 0 && (
                     <a
                       onClick={clearFilters}
                       style={{ color: "#C74634", cursor: "pointer" }}
                     >
                       Clear all filters ({activeFilterCount})
                     </a>
-                  </div>
-                </Col>
-              )}
+                  )}
+                  <Button onClick={() => refetch()} disabled={loading} block>
+                    Refresh Listings
+                  </Button>
+                </div>
+              </Col>
             </Row>
           </Space>
         </Card>
       </motion.div>
+
+      {error && (
+        <Alert
+          type="error"
+          showIcon
+          message="Unable to load job postings"
+          description={error.message}
+          style={{ marginBottom: 24 }}
+        />
+      )}
 
       {/* Results Header */}
       <div style={{ marginBottom: 20 }}>
@@ -268,7 +383,17 @@ export function JobListings({ onSelectJob }: JobListingsProps) {
       </div>
 
       {/* Job Cards Grid */}
-      {filteredJobs.length > 0 ? (
+      {loading ? (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            padding: "60px 0",
+          }}
+        >
+          <Spin size="large" />
+        </div>
+      ) : filteredJobs.length > 0 ? (
         <Row gutter={[20, 20]}>
           {filteredJobs.map((job, index) => (
             <Col xs={24} sm={24} md={12} lg={8} key={job.id}>

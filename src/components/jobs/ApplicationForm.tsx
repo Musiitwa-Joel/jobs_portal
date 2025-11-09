@@ -14,6 +14,8 @@ import {
   Progress,
   Radio,
   Select,
+  Spin,
+  Alert,
 } from "antd";
 import {
   UploadOutlined,
@@ -28,11 +30,119 @@ import {
 } from "@ant-design/icons";
 import { motion, AnimatePresence } from "framer-motion";
 import type { UploadFile, UploadProps } from "antd";
-import { mockJobs } from "../../data/mockJobs";
+import type { RcFile } from "antd/es/upload/interface";
+import { useQuery, useMutation, isApolloError } from "@apollo/client";
+import { JobPostingWithDescription } from "../../../types/job";
+import { JOB_POSTING_QUERY } from "../../gql/queries";
+import { SUBMIT_JOB_APPLICATION_MUTATION } from "../../gql/mutations";
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 const { Option } = Select;
+
+interface ResumeAttachment {
+  kind: string;
+  fileName: string;
+  content: string;
+  mimeType?: string;
+}
+
+interface SubmitJobApplicationResponse {
+  submitJobApplication?: {
+    applicant?: {
+      applicantCode?: string | null;
+    } | null;
+    emailQueued: boolean;
+  } | null;
+}
+
+const EXPERIENCE_YEARS_MAP: Record<string, number> = {
+  "0-1": 0.5,
+  "1-3": 2,
+  "3-5": 4,
+  "5-10": 7.5,
+  "10+": 12,
+};
+
+const NOTICE_PERIOD_LABELS: Record<string, string> = {
+  immediately: "Immediate",
+  "2weeks": "2 Weeks",
+  "1month": "1 Month",
+  "2months": "2 Months",
+  negotiable: "Negotiable",
+};
+
+const SOURCE_OPTIONS = [
+  { value: "university-website", label: "University Website" },
+  { value: "linkedin", label: "LinkedIn" },
+  { value: "facebook", label: "Facebook" },
+  { value: "twitter", label: "Twitter" },
+  { value: "job-board", label: "Job Board" },
+  { value: "referral", label: "Employee Referral" },
+  { value: "newspaper", label: "Newspaper" },
+  { value: "other", label: "Other" },
+];
+
+const QUALIFICATION_LABELS: Record<string, string> = {
+  "high-school": "High School Diploma",
+  certificate: "Certificate",
+  diploma: "Diploma",
+  bachelor: "Bachelor's Degree",
+  master: "Master's Degree",
+  phd: "PhD/Doctorate",
+  other: "Other",
+};
+
+const SOURCE_LABEL_MAP = SOURCE_OPTIONS.reduce<Record<string, string>>(
+  (acc, option) => {
+    acc[option.value] = option.label;
+    return acc;
+  },
+  {}
+);
+
+const fileToBase64 = (file: RcFile) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === "string") {
+        const base64 = result.includes(",") ? result.split(",")[1] : result;
+        if (!base64) {
+          reject(new Error("Unable to read file content."));
+        } else {
+          resolve(base64);
+        }
+      } else {
+        reject(new Error("Invalid file result."));
+      }
+    };
+    reader.onerror = () =>
+      reject(reader.error || new Error("File read failed."));
+    reader.readAsDataURL(file);
+  });
+
+const trimString = (value?: string | null) => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+const mapExperienceYears = (value?: string) => {
+  if (!value) return undefined;
+  if (value in EXPERIENCE_YEARS_MAP) {
+    return EXPERIENCE_YEARS_MAP[value];
+  }
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : undefined;
+};
+
+const mapNoticePeriod = (value?: string) => {
+  if (!value) return undefined;
+  return NOTICE_PERIOD_LABELS[value] || value;
+};
 
 interface ApplicationFormProps {
   jobId: string;
@@ -47,38 +157,90 @@ export function ApplicationForm({
 }: ApplicationFormProps) {
   const [form] = Form.useForm();
   const [currentStep, setCurrentStep] = useState(0);
-  const [loading, setLoading] = useState(false);
   const [resumeFile, setResumeFile] = useState<UploadFile[]>([]);
-  const [formData, setFormData] = useState<any>({});
+  const [formData, setFormData] = useState<Record<string, any>>({});
+  const [resumeAttachment, setResumeAttachment] =
+    useState<ResumeAttachment | null>(null);
+  const [resumeEncoding, setResumeEncoding] = useState(false);
+  const [submitApplication, { loading: submitting }] =
+    useMutation<SubmitJobApplicationResponse>(SUBMIT_JOB_APPLICATION_MUTATION);
 
-  const job = mockJobs.find((j) => j.id === jobId);
+  const {
+    data,
+    loading: jobLoading,
+    error,
+  } = useQuery<{ jobPosting: JobPostingWithDescription }>(JOB_POSTING_QUERY, {
+    variables: { id: jobId },
+    fetchPolicy: "cache-first",
+  });
+
+  const job = data?.jobPosting;
+
+  if (jobLoading) {
+    return (
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px" }}>
+        <Card>
+          <Space
+            align="center"
+            style={{ width: "100%", justifyContent: "center", padding: 32 }}
+          >
+            <Spin size="large" />
+          </Space>
+        </Card>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px" }}>
+        <Card>
+          <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+            <Alert
+              type="error"
+              showIcon
+              message="Unable to load job information"
+              description={error.message}
+            />
+            <Button onClick={onBack}>Back</Button>
+          </Space>
+        </Card>
+      </div>
+    );
+  }
 
   if (!job) {
     return (
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px" }}>
         <Card>
-          <Text>Job not found</Text>
-          <Button onClick={onBack} style={{ marginLeft: 16 }}>
-            Back
-          </Button>
+          <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+            <Text>Job not found</Text>
+            <Button onClick={onBack}>Back</Button>
+          </Space>
         </Card>
       </div>
     );
   }
 
   const generateReferenceNumber = () => {
-    const prefix = "NU";
-    const timestamp = Date.now();
-    const random = Math.floor(Math.random() * 1000);
-    return `${prefix}${timestamp}${random}`;
+    const prefix = "JAP";
+    const charset = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let result = "";
+    for (let i = 0; i < 12; i += 1) {
+      const index = Math.floor(Math.random() * charset.length);
+      result += charset[index];
+    }
+    return `${prefix}${result}`;
   };
 
   const uploadProps: UploadProps = {
-    beforeUpload: (file) => {
-      const isPDF = file.type === "application/pdf";
+    beforeUpload: async (file) => {
+      const rcFile = file as RcFile;
+      const mimeType = rcFile.type || "";
+      const isPDF = mimeType === "application/pdf";
       const isDoc =
-        file.type === "application/msword" ||
-        file.type ===
+        mimeType === "application/msword" ||
+        mimeType ===
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
       if (!isPDF && !isDoc) {
@@ -86,17 +248,50 @@ export function ApplicationForm({
         return false;
       }
 
-      const isLt5M = file.size / 1024 / 1024 < 5;
+      const isLt5M = rcFile.size / 1024 / 1024 < 5;
       if (!isLt5M) {
         message.error("File must be smaller than 5MB!");
         return false;
       }
 
-      setResumeFile([file]);
+      setResumeEncoding(true);
+      setResumeAttachment(null);
+
+      try {
+        const base64 = await fileToBase64(rcFile);
+        const uploadEntry: UploadFile = {
+          uid: rcFile.uid,
+          name: rcFile.name,
+          status: "done",
+          size: rcFile.size,
+          type: mimeType,
+          originFileObj: rcFile,
+        };
+        setResumeFile([uploadEntry]);
+        setResumeAttachment({
+          kind: "RESUME",
+          fileName: rcFile.name,
+          mimeType: mimeType || "application/octet-stream",
+          content: base64,
+        });
+        message.success(`${rcFile.name} is ready to submit.`);
+      } catch (err) {
+        console.error(err);
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to process resume file.";
+        message.error(errorMessage);
+        setResumeFile([]);
+        setResumeAttachment(null);
+      } finally {
+        setResumeEncoding(false);
+      }
+
       return false;
     },
     onRemove: () => {
       setResumeFile([]);
+      setResumeAttachment(null);
+      return true;
     },
     fileList: resumeFile,
     maxCount: 1,
@@ -133,6 +328,7 @@ export function ApplicationForm({
           "lastName",
           "email",
           "phone",
+          "employeeId",
         ]);
         setFormData({ ...formData, ...values });
         setCurrentStep(1);
@@ -150,11 +346,17 @@ export function ApplicationForm({
           "whyThisRole",
           "whatMakesYouFit",
           "careerGoals",
+          "canStartDate",
         ]);
         setFormData({ ...formData, ...values });
         setCurrentStep(3);
       } else if (currentStep === 3) {
-        if (resumeFile.length === 0) {
+        if (resumeEncoding) {
+          message.warning("Please wait until your resume finishes processing.");
+          return;
+        }
+
+        if (resumeFile.length === 0 || !resumeAttachment) {
           message.error("Please upload your resume/CV");
           return;
         }
@@ -162,6 +364,7 @@ export function ApplicationForm({
           "coverLetter",
           "howDidYouHear",
           "employeeId",
+          "additionalComments",
         ]);
         setFormData({ ...formData, ...values });
         setCurrentStep(4);
@@ -176,27 +379,184 @@ export function ApplicationForm({
   };
 
   const handleSubmit = async () => {
-    setLoading(true);
+    if (resumeEncoding) {
+      message.warning("Please wait until your resume finishes processing.");
+      return;
+    }
 
-    setTimeout(() => {
-      const referenceNumber = generateReferenceNumber();
-      const allData = { ...formData, ...form.getFieldsValue() };
+    if (!resumeAttachment) {
+      message.error("Please upload your resume/CV before submitting.");
+      return;
+    }
 
-      console.log("Application Submitted:", {
-        jobId: job.id,
-        jobTitle: job.title,
-        ...allData,
-        resume: resumeFile[0].name,
-        referenceNumber,
-        submittedDate: new Date().toISOString(),
+    try {
+      const currentValues = form.getFieldsValue(true);
+      const allValues = { ...formData, ...currentValues };
+
+      const firstName = trimString(allValues.firstName as string | undefined);
+      const lastName = trimString(allValues.lastName as string | undefined);
+      const email = trimString(allValues.email as string | undefined);
+
+      if (!firstName || !lastName || !email) {
+        message.error("First name, last name, and a valid email are required.");
+        return;
+      }
+
+      const sourceKey = trimString(
+        allValues.howDidYouHear as string | undefined
+      );
+      const sourceLabel = sourceKey
+        ? SOURCE_LABEL_MAP[sourceKey] || sourceKey
+        : undefined;
+      const keySkills =
+        typeof allValues.keySkills === "string"
+          ? (allValues.keySkills as string)
+              .split(",")
+              .map((skill) => skill.trim())
+              .filter(Boolean)
+          : undefined;
+
+      const qualificationKey = trimString(
+        allValues.highestQualification as string | undefined
+      );
+      const qualificationLabel = qualificationKey
+        ? QUALIFICATION_LABELS[qualificationKey] || qualificationKey
+        : undefined;
+
+      const metadataDraft: Record<string, unknown> = {
+        employeeId: trimString(allValues.employeeId as string | undefined),
+        highestQualification: qualificationLabel,
+        keySkills,
+        careerGoals: trimString(allValues.careerGoals as string | undefined),
+        whatMakesYouFit: trimString(
+          allValues.whatMakesYouFit as string | undefined
+        ),
+        whyThisRole: trimString(allValues.whyThisRole as string | undefined),
+        experienceRange: allValues.yearsOfExperience,
+        noticePreference: allValues.canStartDate,
+        heardFrom: sourceLabel,
+      };
+
+      if (sourceKey) {
+        metadataDraft.heardFromKey = sourceKey;
+      }
+
+      if (qualificationKey) {
+        metadataDraft.highestQualificationKey = qualificationKey;
+      }
+
+      metadataDraft.resumeFileName = resumeAttachment.fileName;
+      metadataDraft.resumeMimeType = resumeAttachment.mimeType;
+
+      if (trimString(allValues.additionalComments as string | undefined)) {
+        metadataDraft.additionalComments = trimString(
+          allValues.additionalComments as string | undefined
+        );
+      }
+
+      const metadataEntries = Object.entries(metadataDraft).filter(
+        ([_, value]) => {
+          if (Array.isArray(value)) {
+            return value.length > 0;
+          }
+          if (value == null) {
+            return false;
+          }
+          if (typeof value === "string") {
+            return value.trim().length > 0;
+          }
+          return true;
+        }
+      );
+
+      const metadata = metadataEntries.length
+        ? Object.fromEntries(metadataEntries)
+        : undefined;
+
+      const input = {
+        jobPostingId: job.id,
+        firstName,
+        lastName,
+        email,
+        phone: trimString(allValues.phone as string | undefined),
+        source: sourceLabel || sourceKey || "Jobs Portal",
+        resume: { ...resumeAttachment },
+        coverLetter: trimString(allValues.coverLetter as string | undefined),
+        currentEmployer: trimString(
+          allValues.currentEmployer as string | undefined
+        ),
+        currentTitle: trimString(allValues.currentRole as string | undefined),
+        experienceYears: mapExperienceYears(
+          allValues.yearsOfExperience as string | undefined
+        ),
+        noticePeriod: mapNoticePeriod(
+          allValues.canStartDate as string | undefined
+        ),
+        expectedSalary: undefined,
+        salaryCurrency: undefined,
+        message: trimString(allValues.additionalComments as string | undefined),
+        metadata,
+      };
+
+      const { data: submissionData } = await submitApplication({
+        variables: { input },
       });
 
-      message.success("Application submitted successfully!");
-      setLoading(false);
+      const referenceNumber =
+        submissionData?.submitJobApplication?.applicant?.applicantCode ||
+        generateReferenceNumber();
+
+      message.success(
+        `Application submitted successfully! Reference: ${referenceNumber}`
+      );
       form.resetFields();
       setResumeFile([]);
+      setResumeAttachment(null);
+      setResumeEncoding(false);
+      setFormData({});
+      setCurrentStep(0);
       onSuccess(referenceNumber);
-    }, 2000);
+    } catch (err) {
+      console.error("Application submission failed:", err);
+      let errorMessage = "Failed to submit application. Please try again.";
+      // Narrow the unknown caught error for safer checks
+      const maybeApollo = isApolloError(err as Error) ? (err as any) : null;
+      if (maybeApollo) {
+        if (maybeApollo.graphQLErrors.length) {
+          errorMessage = maybeApollo.graphQLErrors[0].message;
+        }
+
+        const networkError = maybeApollo.networkError as
+          | (Error & {
+              statusCode?: number;
+              status?: number;
+              result?: { statusCode?: number };
+            })
+          | undefined;
+
+        if (networkError) {
+          const statusCode =
+            typeof networkError.statusCode === "number"
+              ? networkError.statusCode
+              : typeof networkError.status === "number"
+                ? networkError.status
+                : typeof networkError.result?.statusCode === "number"
+                  ? networkError.result.statusCode
+                  : undefined;
+
+          if (statusCode === 413) {
+            errorMessage =
+              "We couldn't upload your resume because the server reported it was too large. Please confirm the file is under 5 MB, then try again. If it already is, wait a moment and retry or email hr@nkumbauniversity.ac.ug for help.";
+          } else if (!maybeApollo.graphQLErrors.length) {
+            errorMessage =
+              "We couldn't submit your application because of a network issue. Please try again in a moment.";
+          }
+        }
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
+      }
+      message.error(errorMessage);
+    }
   };
 
   const renderStepContent = () => {
@@ -284,7 +644,7 @@ export function ApplicationForm({
                 <Input placeholder="+256 700 000 000" />
               </Form.Item>
 
-              {job.eligibility !== "External" && (
+              {(job.visibility === "INTERNAL" || job.visibility === "BOTH") && (
                 <Form.Item
                   name="employeeId"
                   label="Employee ID (Optional)"
@@ -526,13 +886,25 @@ export function ApplicationForm({
                 required
                 help="Accepted formats: PDF, DOC, DOCX (Max size: 5MB)"
               >
-                <Upload {...uploadProps}>
-                  <Button icon={<UploadOutlined />} style={{ width: "100%" }}>
+                <Upload {...uploadProps} disabled={resumeEncoding}>
+                  <Button
+                    icon={<UploadOutlined />}
+                    style={{ width: "100%" }}
+                    disabled={resumeEncoding}
+                  >
                     {resumeFile.length > 0
                       ? "Change Resume/CV"
                       : "Upload Resume/CV"}
                   </Button>
                 </Upload>
+                {resumeEncoding && (
+                  <Text
+                    style={{ marginTop: 8, display: "block" }}
+                    type="secondary"
+                  >
+                    Processing document...
+                  </Text>
+                )}
                 {resumeFile.length > 0 && (
                   <div
                     style={{
@@ -571,14 +943,11 @@ export function ApplicationForm({
                 label="How did you hear about this position?"
               >
                 <Select placeholder="Select an option">
-                  <Option value="university-website">University Website</Option>
-                  <Option value="linkedin">LinkedIn</Option>
-                  <Option value="facebook">Facebook</Option>
-                  <Option value="twitter">Twitter</Option>
-                  <Option value="job-board">Job Board</Option>
-                  <Option value="referral">Employee Referral</Option>
-                  <Option value="newspaper">Newspaper</Option>
-                  <Option value="other">Other</Option>
+                  {SOURCE_OPTIONS.map((option) => (
+                    <Option key={option.value} value={option.value}>
+                      {option.label}
+                    </Option>
+                  ))}
                 </Select>
               </Form.Item>
 
@@ -904,10 +1273,10 @@ export function ApplicationForm({
               <Text
                 style={{ fontSize: 14, color: "#666666", display: "block" }}
               >
-                {job.title}
+                {job.jobTitle}
               </Text>
               <Text style={{ fontSize: 13, color: "#999999" }}>
-                {job.department} • {job.location}
+                {`${job.department || "Department not specified"} • ${job.workLocation || "Location not specified"}`}
               </Text>
             </div>
 
@@ -950,7 +1319,7 @@ export function ApplicationForm({
             >
               <Button
                 onClick={currentStep === 0 ? onBack : handlePrevious}
-                disabled={loading}
+                disabled={submitting}
                 style={{ minWidth: 100 }}
               >
                 {currentStep === 0 ? "Cancel" : "Previous"}
@@ -962,6 +1331,7 @@ export function ApplicationForm({
                   onClick={handleNext}
                   icon={<ArrowRightOutlined />}
                   iconPosition="end"
+                  disabled={submitting || (currentStep === 3 && resumeEncoding)}
                   style={{ minWidth: 100 }}
                 >
                   Next
@@ -970,9 +1340,10 @@ export function ApplicationForm({
                 <Button
                   type="primary"
                   onClick={handleSubmit}
-                  loading={loading}
+                  loading={submitting}
                   icon={<CheckOutlined />}
                   iconPosition="end"
+                  disabled={submitting}
                   style={{ minWidth: 120 }}
                 >
                   Submit Application

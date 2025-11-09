@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Card,
   Typography,
@@ -11,179 +11,322 @@ import {
   Empty,
   Descriptions,
   Divider,
+  message,
 } from "antd";
 import {
   SearchOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
   CloseCircleOutlined,
-  FileTextOutlined,
   SyncOutlined,
 } from "@ant-design/icons";
 import { motion, AnimatePresence } from "framer-motion";
-import { Application } from "../../../types/job";
+import { useLazyQuery } from "@apollo/client";
+import {
+  JobApplicantWithPosting,
+  JobApplicationStatus,
+} from "../../../types/job";
+import { JOB_APPLICANT_BY_REFERENCE_QUERY } from "../../gql/queries";
 
 const { Title, Text, Paragraph } = Typography;
 
 interface ApplicationTrackingProps {}
 
-// Mock data for demonstration
-const mockApplications: Application[] = [
-  {
-    id: "1",
-    jobId: "1",
-    jobTitle: "Senior Lecturer - Computer Science",
-    applicantName: "John Doe",
-    email: "john.doe@example.com",
-    phone: "+256 700 000 000",
-    resumeUrl: "/resumes/john-doe.pdf",
-    status: "Under Review",
-    submittedDate: "2024-01-20",
-    referenceNumber: "NU17058234561234",
-  },
-  {
-    id: "2",
-    jobId: "5",
-    jobTitle: "Assistant Lecturer - Business Administration",
-    applicantName: "John Doe",
-    email: "john.doe@example.com",
-    phone: "+256 700 000 000",
-    resumeUrl: "/resumes/john-doe.pdf",
-    status: "Shortlisted",
-    submittedDate: "2024-01-15",
-    referenceNumber: "NU17058234565678",
-  },
+interface ApplicantQueryResult {
+  jobApplicants: {
+    data: JobApplicantWithPosting[];
+    total: number;
+  };
+}
+
+const STATUS_LABELS: Record<JobApplicationStatus, string> = {
+  NEW: "Submitted",
+  IN_REVIEW: "Under Review",
+  SHORTLISTED: "Shortlisted",
+  INTERVIEW: "Interview",
+  OFFER: "Offer Extended",
+  REJECTED: "Not Selected",
+  HIRED: "Hired",
+  WITHDRAWN: "Withdrawn",
+} as const;
+
+const STATUS_COLORS: Record<JobApplicationStatus, string> = {
+  NEW: "blue",
+  IN_REVIEW: "orange",
+  SHORTLISTED: "green",
+  INTERVIEW: "purple",
+  OFFER: "gold",
+  REJECTED: "red",
+  HIRED: "cyan",
+  WITHDRAWN: "default",
+} as const;
+
+const TIMELINE_STAGES: JobApplicationStatus[] = [
+  "NEW",
+  "IN_REVIEW",
+  "SHORTLISTED",
+  "INTERVIEW",
+  "OFFER",
+  "HIRED",
 ];
+
+const STAGE_DESCRIPTIONS: Partial<Record<JobApplicationStatus, string>> = {
+  NEW: "Application received successfully",
+  IN_REVIEW: "HR team is reviewing your application",
+  SHORTLISTED: "Congratulations! You've been shortlisted",
+  INTERVIEW: "Interview scheduling is in progress",
+  OFFER: "An offer has been extended",
+  HIRED: "Welcome to Nkumba University!",
+};
+
+const FINAL_STATUS_MESSAGES: Partial<Record<JobApplicationStatus, string>> = {
+  REJECTED:
+    "Thank you for your interest. Unfortunately, we have decided to proceed with other candidates.",
+  WITHDRAWN:
+    "You have withdrawn your application. Contact HR if this was a mistake.",
+  HIRED: "Congratulations! Our HR team will share onboarding details shortly.",
+  OFFER: "Our HR team will reach out with next steps regarding your offer.",
+};
+
+const STATUS_ALERTS: Partial<
+  Record<
+    JobApplicationStatus,
+    {
+      type: "success" | "info" | "warning";
+      title: string;
+      description: string;
+    }
+  >
+> = {
+  NEW: {
+    type: "info",
+    title: "Application Received",
+    description:
+      STAGE_DESCRIPTIONS.NEW ??
+      "Your application has been received successfully.",
+  },
+  IN_REVIEW: {
+    type: "info",
+    title: "Application Under Review",
+    description:
+      STAGE_DESCRIPTIONS.IN_REVIEW ??
+      "Our recruitment team is currently reviewing your application.",
+  },
+  SHORTLISTED: {
+    type: "success",
+    title: "Congratulations!",
+    description:
+      "You have been shortlisted. Our HR team will contact you soon to schedule next steps.",
+  },
+  INTERVIEW: {
+    type: "info",
+    title: "Interview Stage",
+    description:
+      STAGE_DESCRIPTIONS.INTERVIEW ??
+      "Interview scheduling is in progress. Watch your email for details.",
+  },
+  OFFER: {
+    type: "success",
+    title: "Offer Extended",
+    description:
+      FINAL_STATUS_MESSAGES.OFFER ??
+      "An offer has been extended. Our HR team will reach out with next steps.",
+  },
+  HIRED: {
+    type: "success",
+    title: "Welcome Aboard!",
+    description:
+      FINAL_STATUS_MESSAGES.HIRED ??
+      "Congratulations! Our HR team will share onboarding details shortly.",
+  },
+  REJECTED: {
+    type: "warning",
+    title: "Application Status",
+    description:
+      FINAL_STATUS_MESSAGES.REJECTED ??
+      "Thank you for your interest. We encourage you to apply for other roles.",
+  },
+  WITHDRAWN: {
+    type: "warning",
+    title: "Application Withdrawn",
+    description:
+      FINAL_STATUS_MESSAGES.WITHDRAWN ??
+      "You have withdrawn your application. Contact HR if this was a mistake.",
+  },
+};
 
 export function ApplicationTracking({}: ApplicationTrackingProps) {
   const [referenceNumber, setReferenceNumber] = useState("");
   const [searchedApplication, setSearchedApplication] =
-    useState<Application | null>(null);
+    useState<JobApplicantWithPosting | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [lastSearch, setLastSearch] = useState("");
+
+  const [fetchApplicant, { data, loading, error }] =
+    useLazyQuery<ApplicantQueryResult>(JOB_APPLICANT_BY_REFERENCE_QUERY, {
+      fetchPolicy: "network-only",
+    });
 
   const handleSearch = () => {
-    if (!referenceNumber.trim()) {
+    const trimmed = referenceNumber.trim();
+    if (!trimmed) {
+      message.warning("Please enter your reference number.");
       return;
     }
 
-    setLoading(true);
+    const normalizedInput = trimmed.toUpperCase();
+    setReferenceNumber(normalizedInput);
     setNotFound(false);
-
-    // Simulate API call
-    setTimeout(() => {
-      const application = mockApplications.find(
-        (app) => app.referenceNumber === referenceNumber.trim()
-      );
-
-      if (application) {
-        setSearchedApplication(application);
-        setNotFound(false);
-      } else {
-        setSearchedApplication(null);
-        setNotFound(true);
-      }
-      setLoading(false);
-    }, 1000);
+    setSearchedApplication(null);
+    setLastSearch(normalizedInput);
+    fetchApplicant({
+      variables: {
+        limit: 5,
+        filter: { search: normalizedInput },
+      },
+    });
   };
 
-  const getStatusColor = (status: Application["status"]) => {
-    switch (status) {
-      case "Submitted":
-        return "blue";
-      case "Under Review":
-        return "orange";
-      case "Shortlisted":
-        return "green";
-      case "Rejected":
-        return "red";
-      case "Hired":
-        return "purple";
-      default:
-        return "default";
+  useEffect(() => {
+    if (!lastSearch || loading) {
+      return;
     }
-  };
 
-  const getStatusIcon = (status: Application["status"]) => {
+    const results = data?.jobApplicants?.data ?? [];
+    if (!results.length) {
+      setSearchedApplication(null);
+      setNotFound(true);
+      return;
+    }
+
+    const normalizedSearch = lastSearch.toLowerCase();
+    const exactMatch = results.find(
+      (applicant) => applicant.applicantCode.toLowerCase() === normalizedSearch
+    );
+
+    if (exactMatch) {
+      setSearchedApplication(exactMatch);
+      setNotFound(false);
+    } else {
+      setSearchedApplication(null);
+      setNotFound(true);
+    }
+  }, [data, loading, lastSearch]);
+
+  const statusAlertConfig = useMemo(() => {
+    if (!searchedApplication) {
+      return null;
+    }
+
+    return STATUS_ALERTS[searchedApplication.status] ?? null;
+  }, [searchedApplication]);
+
+  const getStatusLabel = (status: JobApplicationStatus) =>
+    STATUS_LABELS[status] || status.replace(/_/g, " ");
+
+  const getStatusColor = (status: JobApplicationStatus) =>
+    STATUS_COLORS[status] || "default";
+
+  const getStatusIcon = (status: JobApplicationStatus) => {
     switch (status) {
-      case "Submitted":
-        return <FileTextOutlined />;
-      case "Under Review":
+      case "NEW":
+        return <ClockCircleOutlined />;
+      case "IN_REVIEW":
         return <SyncOutlined spin />;
-      case "Shortlisted":
+      case "SHORTLISTED":
+      case "OFFER":
+      case "HIRED":
         return <CheckCircleOutlined />;
-      case "Rejected":
+      case "INTERVIEW":
+        return <ClockCircleOutlined />;
+      case "REJECTED":
+      case "WITHDRAWN":
         return <CloseCircleOutlined />;
-      case "Hired":
-        return <CheckCircleOutlined />;
       default:
         return <ClockCircleOutlined />;
     }
   };
 
-  const getTimelineItems = (status: Application["status"]) => {
-    const allStatuses: Application["status"][] = [
-      "Submitted",
-      "Under Review",
-      "Shortlisted",
-      "Hired",
-    ];
+  const getTimelineItems = (status: JobApplicationStatus) => {
+    const normalizedStatus = status ?? "NEW";
+    const isTerminalNegative =
+      normalizedStatus === "REJECTED" || normalizedStatus === "WITHDRAWN";
 
-    const currentIndex = allStatuses.indexOf(status);
-    const isRejected = status === "Rejected";
+    const stageIndex = TIMELINE_STAGES.indexOf(normalizedStatus);
+    const fallbackIndex = TIMELINE_STAGES.indexOf("IN_REVIEW");
+    const effectiveIndex =
+      stageIndex !== -1 ? stageIndex : fallbackIndex === -1 ? 0 : fallbackIndex;
 
-    if (isRejected) {
-      return [
-        {
-          color: "green",
-          dot: <CheckCircleOutlined />,
-          children: (
-            <div>
-              <Text strong>Application Submitted</Text>
-              <br />
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Your application has been received
-              </Text>
-            </div>
-          ),
-        },
-        {
-          color: "red",
-          dot: <CloseCircleOutlined />,
-          children: (
-            <div>
-              <Text strong>Application Not Successful</Text>
-              <br />
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Thank you for your interest
-              </Text>
-            </div>
-          ),
-        },
-      ];
-    }
+    const items = TIMELINE_STAGES.map((stage, index) => {
+      const isCurrent = stageIndex !== -1 && index === stageIndex;
+      const isCompleted =
+        stageIndex !== -1 ? index < stageIndex : index <= effectiveIndex;
 
-    return allStatuses.map((s, index) => {
-      const isPast = index <= currentIndex;
-      const isCurrent = index === currentIndex;
+      const color = isCurrent ? "blue" : isCompleted ? "green" : "gray";
+      const dot = isCurrent ? (
+        getStatusIcon(normalizedStatus)
+      ) : isCompleted ? (
+        <CheckCircleOutlined />
+      ) : (
+        <ClockCircleOutlined />
+      );
 
       return {
-        color: isPast ? "green" : "gray",
-        dot: isPast ? <CheckCircleOutlined /> : <ClockCircleOutlined />,
+        color,
+        dot,
         children: (
           <div>
-            <Text strong={isCurrent}>{s}</Text>
-            <br />
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {s === "Submitted" && "Application received successfully"}
-              {s === "Under Review" && "HR team is reviewing your application"}
-              {s === "Shortlisted" && "Congratulations! You've been shortlisted"}
-              {s === "Hired" && "Welcome to Nkumba University!"}
-            </Text>
+            <Text strong={isCurrent}>{getStatusLabel(stage)}</Text>
+            {STAGE_DESCRIPTIONS[stage] && (
+              <>
+                <br />
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {STAGE_DESCRIPTIONS[stage]}
+                </Text>
+              </>
+            )}
           </div>
         ),
       };
     });
+
+    if (isTerminalNegative) {
+      items.push({
+        color: "red",
+        dot: <CloseCircleOutlined />,
+        children: (
+          <div>
+            <Text strong>{getStatusLabel(normalizedStatus)}</Text>
+            {FINAL_STATUS_MESSAGES[normalizedStatus] && (
+              <>
+                <br />
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {FINAL_STATUS_MESSAGES[normalizedStatus]}
+                </Text>
+              </>
+            )}
+          </div>
+        ),
+      });
+    } else if (
+      (normalizedStatus === "OFFER" || normalizedStatus === "HIRED") &&
+      FINAL_STATUS_MESSAGES[normalizedStatus]
+    ) {
+      items[effectiveIndex] = {
+        ...items[effectiveIndex],
+        children: (
+          <div>
+            <Text strong>{getStatusLabel(normalizedStatus)}</Text>
+            <br />
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {FINAL_STATUS_MESSAGES[normalizedStatus]}
+            </Text>
+          </div>
+        ),
+      };
+    }
+
+    return items;
   };
 
   return (
@@ -231,7 +374,9 @@ export function ApplicationTracking({}: ApplicationTrackingProps) {
                 <Input
                   placeholder="Enter your reference number (e.g., NU17058234561234)"
                   value={referenceNumber}
-                  onChange={(e) => setReferenceNumber(e.target.value)}
+                  onChange={(e) =>
+                    setReferenceNumber(e.target.value.toUpperCase())
+                  }
                   onPressEnter={handleSearch}
                   prefix={<SearchOutlined style={{ color: "#bfbfbf" }} />}
                   style={{ borderRadius: "4px 0 0 4px" }}
@@ -248,13 +393,23 @@ export function ApplicationTracking({}: ApplicationTrackingProps) {
             </div>
 
             <Alert
-              message="Demo Reference Numbers"
+              message="Where to Find Your Reference Number"
               description={
                 <Space direction="vertical" size="small">
-                  <Text>Try these reference numbers to see the tracking in action:</Text>
-                  <Text code>NU17058234561234</Text> - Under Review
-                  <br />
-                  <Text code>NU17058234565678</Text> - Shortlisted
+                  <Text>
+                    We emailed a unique reference number right after you
+                    submitted your application.
+                  </Text>
+                  <Text>
+                    It usually looks like <Text code>NU1705...</Text>.
+                  </Text>
+                  <Text type="secondary">
+                    Can't find it? Reach out to our HR team at{" "}
+                    <a href="mailto:hr@nkumbauniversity.ac.ug">
+                      hr@nkumbauniversity.ac.ug
+                    </a>{" "}
+                    and we'll resend it.
+                  </Text>
                 </Space>
               }
               type="info"
@@ -264,6 +419,26 @@ export function ApplicationTracking({}: ApplicationTrackingProps) {
           </Space>
         </Card>
       </motion.div>
+
+      {error && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          style={{ marginBottom: 24 }}
+        >
+          <Alert
+            type="error"
+            showIcon
+            message="We couldn't retrieve your application"
+            description={
+              error.message ||
+              "Please try again in a moment or contact HR for assistance."
+            }
+            style={{ borderRadius: 4 }}
+          />
+        </motion.div>
+      )}
 
       <AnimatePresence mode="wait">
         {notFound && (
@@ -290,7 +465,7 @@ export function ApplicationTracking({}: ApplicationTrackingProps) {
                     </Text>
                     <Text type="secondary">
                       We couldn't find an application with reference number:{" "}
-                      <Text code>{referenceNumber}</Text>
+                      <Text code>{lastSearch}</Text>
                     </Text>
                     <Text type="secondary" style={{ fontSize: 12 }}>
                       Please check your reference number and try again
@@ -322,35 +497,62 @@ export function ApplicationTracking({}: ApplicationTrackingProps) {
                 <Descriptions column={{ xs: 1, sm: 2 }} bordered>
                   <Descriptions.Item label="Reference Number" span={2}>
                     <Text strong code>
-                      {searchedApplication.referenceNumber}
+                      {searchedApplication.applicantCode}
                     </Text>
                   </Descriptions.Item>
                   <Descriptions.Item label="Position" span={2}>
-                    <Text strong>{searchedApplication.jobTitle}</Text>
+                    <Text strong>
+                      {searchedApplication.jobPosting?.jobTitle ??
+                        searchedApplication.jobTitle}
+                    </Text>
+                    {searchedApplication.jobPosting?.jobCode && (
+                      <>
+                        <br />
+                        <Text type="secondary">
+                          Job Code: {searchedApplication.jobPosting.jobCode}
+                        </Text>
+                      </>
+                    )}
                   </Descriptions.Item>
                   <Descriptions.Item label="Status">
                     <Tag
                       color={getStatusColor(searchedApplication.status)}
                       icon={getStatusIcon(searchedApplication.status)}
                     >
-                      {searchedApplication.status}
+                      {getStatusLabel(searchedApplication.status)}
                     </Tag>
                   </Descriptions.Item>
                   <Descriptions.Item label="Submitted Date">
-                    {new Date(
-                      searchedApplication.submittedDate
-                    ).toLocaleDateString("en-US", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
+                    {new Date(searchedApplication.createdAt).toLocaleDateString(
+                      "en-US",
+                      {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      }
+                    )}
                   </Descriptions.Item>
                   <Descriptions.Item label="Applicant">
-                    {searchedApplication.applicantName}
+                    {searchedApplication.fullName ||
+                      [
+                        searchedApplication.firstName,
+                        searchedApplication.lastName,
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
                   </Descriptions.Item>
                   <Descriptions.Item label="Email">
-                    {searchedApplication.email}
+                    <a href={`mailto:${searchedApplication.email}`}>
+                      {searchedApplication.email}
+                    </a>
                   </Descriptions.Item>
+                  {searchedApplication.phone && (
+                    <Descriptions.Item label="Phone">
+                      <a href={`tel:${searchedApplication.phone}`}>
+                        {searchedApplication.phone}
+                      </a>
+                    </Descriptions.Item>
+                  )}
                 </Descriptions>
               </Card>
 
@@ -362,45 +564,17 @@ export function ApplicationTracking({}: ApplicationTrackingProps) {
                   boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
                 }}
               >
-                <Timeline items={getTimelineItems(searchedApplication.status)} />
+                <Timeline
+                  items={getTimelineItems(searchedApplication.status)}
+                />
 
                 <Divider />
 
-                {searchedApplication.status === "Shortlisted" && (
+                {statusAlertConfig && (
                   <Alert
-                    message="Congratulations!"
-                    description="You have been shortlisted for this position. Our HR team will contact you soon via email or phone to schedule an interview. Please ensure your contact details are up to date."
-                    type="success"
-                    showIcon
-                    style={{ borderRadius: 4 }}
-                  />
-                )}
-
-                {searchedApplication.status === "Under Review" && (
-                  <Alert
-                    message="Application Under Review"
-                    description="Our recruitment team is currently reviewing your application. This process typically takes 2-3 weeks. We will notify you once a decision has been made."
-                    type="info"
-                    showIcon
-                    style={{ borderRadius: 4 }}
-                  />
-                )}
-
-                {searchedApplication.status === "Rejected" && (
-                  <Alert
-                    message="Application Status"
-                    description="Thank you for your interest in this position. Unfortunately, we have decided to proceed with other candidates. We encourage you to apply for other positions that match your qualifications."
-                    type="warning"
-                    showIcon
-                    style={{ borderRadius: 4 }}
-                  />
-                )}
-
-                {searchedApplication.status === "Hired" && (
-                  <Alert
-                    message="Welcome Aboard!"
-                    description="Congratulations! You have been selected for this position. Our HR team will contact you with onboarding details and next steps. Welcome to Nkumba University!"
-                    type="success"
+                    message={statusAlertConfig.title}
+                    description={statusAlertConfig.description}
+                    type={statusAlertConfig.type}
                     showIcon
                     style={{ borderRadius: 4 }}
                   />
@@ -418,8 +592,8 @@ export function ApplicationTracking({}: ApplicationTrackingProps) {
                 <Space direction="vertical" size="small">
                   <Text strong>Need Help?</Text>
                   <Text type="secondary">
-                    If you have any questions about your application status, please
-                    contact our HR department:
+                    If you have any questions about your application status,
+                    please contact our HR department:
                   </Text>
                   <Text>
                     Email:{" "}
